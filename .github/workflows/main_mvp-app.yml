@@ -29,8 +29,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Zip artifact for deployment
-        run: zip -r release.zip .next app lib node_modules package*.json next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json public 2>/dev/null || zip -r release.zip .next app lib node_modules package*.json next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json
+      - name: Create deployment package
+        run: |
+          cp package.json package-lock.json next.config.ts ./
+          zip -r release.zip .next package.json package-lock.json next.config.ts node_modules app lib tailwind.config.ts postcss.config.mjs tsconfig.json -x "node_modules/.cache/*"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
