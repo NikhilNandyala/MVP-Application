@@ -112,23 +112,23 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-slate-900 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <header className="text-center py-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+        <header className="text-center py-6 mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-100 mb-2">
             MDX Blog Builder
           </h1>
-          <p className="text-gray-600">
+          <p className="text-slate-400 text-sm sm:text-base">
             Convert raw text to structured MDX with auto-tagging
           </p>
         </header>
 
         {/* Input Controls */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="bg-slate-800 rounded-lg shadow-lg p-4 sm:p-6 mb-6 border border-slate-700">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="title" className="block text-sm font-medium text-slate-300 mb-2">
                 Title (optional)
               </label>
               <input
@@ -137,18 +137,18 @@ export default function Home() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Azure Troubleshooting Guide"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-100 placeholder-slate-400 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="category" className="block text-sm font-medium text-slate-300 mb-2">
                 Category
               </label>
               <select
                 id="category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="azure-troubleshooting">Azure Troubleshooting</option>
                 <option value="azure-guide">Azure Guide</option>
@@ -157,14 +157,14 @@ export default function Home() {
               </select>
             </div>
             <div>
-              <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="severity" className="block text-sm font-medium text-slate-300 mb-2">
                 Severity
               </label>
               <select
                 id="severity"
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 text-slate-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
@@ -177,14 +177,14 @@ export default function Home() {
           {/* Auto-tags Display */}
           {tags.length > 0 && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Auto-detected Tags
               </label>
               <div className="flex flex-wrap gap-2">
                 {tags.map((tag, index) => (
                   <span
                     key={index}
-                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+                    className="px-3 py-1 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-full text-sm font-medium"
                   >
                     {tag}
                   </span>
@@ -194,32 +194,32 @@ export default function Home() {
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 mb-4">
             <button
               onClick={handleConvert}
               disabled={isLoading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
             >
               {isLoading ? 'Converting...' : 'Convert'}
             </button>
             <button
               onClick={handleValidate}
               disabled={!mdxOutput.trim()}
-              className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
             >
               Validate
             </button>
             <button
               onClick={handleCopy}
               disabled={!mdxOutput.trim()}
-              className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+              className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
             >
               Copy
             </button>
             <button
               onClick={handleDownload}
               disabled={!mdxOutput.trim()}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md disabled:bg-slate-600 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
             >
               Download
             </button>
@@ -227,11 +227,11 @@ export default function Home() {
 
           {/* Warnings & Errors */}
           {warnings.length > 0 && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-              <h3 className="text-sm font-semibold text-yellow-800 mb-2">Warnings:</h3>
+            <div className="mt-4 p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-md">
+              <h3 className="text-sm font-semibold text-yellow-400 mb-2">Warnings:</h3>
               <ul className="list-disc list-inside space-y-1">
                 {warnings.map((warning, index) => (
-                  <li key={index} className="text-sm text-yellow-700">
+                  <li key={index} className="text-sm text-yellow-300">
                     {warning}
                   </li>
                 ))}
@@ -242,13 +242,13 @@ export default function Home() {
           {validationErrors.length > 0 && (
             <div className={`mt-4 p-4 rounded-md border ${
               validationErrors[0].startsWith('✓') 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-red-50 border-red-200'
+                ? 'bg-green-900/20 border-green-700/50' 
+                : 'bg-red-900/20 border-red-700/50'
             }`}>
               <h3 className={`text-sm font-semibold mb-2 ${
                 validationErrors[0].startsWith('✓') 
-                  ? 'text-green-800' 
-                  : 'text-red-800'
+                  ? 'text-green-400' 
+                  : 'text-red-400'
               }`}>
                 Validation Result:
               </h3>
@@ -256,8 +256,8 @@ export default function Home() {
                 {validationErrors.map((error, index) => (
                   <li key={index} className={`text-sm ${
                     validationErrors[0].startsWith('✓') 
-                      ? 'text-green-700' 
-                      : 'text-red-700'
+                      ? 'text-green-300' 
+                      : 'text-red-300'
                   }`}>
                     {error}
                   </li>
@@ -270,8 +270,8 @@ export default function Home() {
         {/* Text Areas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Input Textarea */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <label htmlFor="rawText" className="block text-lg font-semibold text-gray-900 mb-3">
+          <div className="bg-slate-800 rounded-lg shadow-lg p-4 sm:p-6 border border-slate-700">
+            <label htmlFor="rawText" className="block text-lg font-semibold text-slate-100 mb-3">
               Raw Input
             </label>
             <textarea
@@ -279,13 +279,13 @@ export default function Home() {
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
               placeholder="Paste your raw troubleshooting notes or Azure documentation here..."
-              className="w-full h-96 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
+              className="w-full h-96 px-4 py-3 bg-slate-900 border border-slate-600 text-slate-100 placeholder-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm resize-none"
             />
           </div>
 
           {/* Output Textarea */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <label htmlFor="mdxOutput" className="block text-lg font-semibold text-gray-900 mb-3">
+          <div className="bg-slate-800 rounded-lg shadow-lg p-4 sm:p-6 border border-slate-700">
+            <label htmlFor="mdxOutput" className="block text-lg font-semibold text-slate-100 mb-3">
               Generated MDX
             </label>
             <textarea
@@ -293,13 +293,13 @@ export default function Home() {
               value={mdxOutput}
               readOnly
               placeholder="Generated MDX will appear here..."
-              className="w-full h-96 px-4 py-3 border border-gray-300 rounded-md bg-gray-50 font-mono text-sm resize-none"
+              className="w-full h-96 px-4 py-3 bg-slate-900 border border-slate-600 text-slate-100 placeholder-slate-500 rounded-md font-mono text-sm resize-none"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <footer className="text-center py-8 text-gray-600 text-sm">
+        <footer className="text-center py-8 text-slate-500 text-sm mt-8">
           Built for Azure App Service • Node 22 LTS • Next.js App Router
         </footer>
       </div>
