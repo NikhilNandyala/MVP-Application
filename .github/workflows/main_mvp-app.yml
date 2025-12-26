@@ -69,4 +69,6 @@ jobs:
           slot-name: 'Production'
           package: .
           restart: true
+          clean: true
+          type: zip
           
