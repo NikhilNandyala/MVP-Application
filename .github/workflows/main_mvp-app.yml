@@ -30,9 +30,7 @@ jobs:
           npm run build
 
       - name: Create deployment package
-        run: |
-          cp package.json package-lock.json next.config.ts ./
-          zip -r release.zip .next package.json package-lock.json next.config.ts node_modules app lib tailwind.config.ts postcss.config.mjs tsconfig.json -x "node_modules/.cache/*"
+        run: zip -r release.zip .next package.json package-lock.json next.config.ts node_modules app lib tailwind.config.ts postcss.config.mjs tsconfig.json -x "node_modules/.cache/*"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
