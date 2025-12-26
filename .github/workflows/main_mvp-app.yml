@@ -61,6 +61,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_6212F48401B144BE894F4D3BC03D7C47 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_928778407CEF4B10BE717A14DF4781E3 }}
 
+      - name: Stop Azure Web App
+        run: az webapp stop --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
@@ -68,4 +71,7 @@ jobs:
           app-name: 'MVP-APP'
           slot-name: 'Production'
           package: .
+      
+      - name: Start Azure Web App
+        run: az webapp start --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group
           
