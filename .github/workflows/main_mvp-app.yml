@@ -30,7 +30,7 @@ jobs:
           npm run build
 
       - name: Zip artifact for deployment
-        run: zip -r release.zip .next node_modules package*.json next.config.ts
+        run: zip -r release.zip .next app lib node_modules package*.json next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json public 2>/dev/null || zip -r release.zip .next app lib node_modules package*.json next.config.ts tailwind.config.ts postcss.config.mjs tsconfig.json
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
