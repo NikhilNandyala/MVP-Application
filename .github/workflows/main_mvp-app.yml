@@ -59,10 +59,7 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_928778407CEF4B10BE717A14DF4781E3 }}
 
       - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: 'MVP-APP'
-          slot-name: 'Production'
-          package: release.zip
+        run: |
+          az webapp config appsettings set --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true WEBSITE_NODE_DEFAULT_VERSION=22-lts
+          az webapp deploy --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group --src-path release.zip --type zip --async false --restart true --clean true
           
