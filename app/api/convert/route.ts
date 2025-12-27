@@ -26,6 +26,113 @@ interface ParsedSections {
 }
 
 /**
+ * Detect and convert table-like structures to Markdown tables
+ */
+function detectAndConvertTables(lines: string[]): string[] {
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Check if this line looks like a table (pipe-separated or multi-space separated)
+    const isPipeSeparated = line.includes('|');
+    const hasMultipleSpaces = /\s{2,}/.test(line);
+
+    if (isPipeSeparated || hasMultipleSpaces) {
+      // Try to build a table starting from this line
+      const tableLines: string[] = [line];
+      let j = i + 1;
+
+      // Collect consecutive lines that look like table rows
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        const nextIsPipe = nextLine.includes('|');
+        const nextHasSpaces = /\s{2,}/.test(nextLine);
+        const isSeparator = /^[-|:\s]+$/.test(nextLine);
+
+        // Stop if line doesn't match table pattern (unless it's a separator)
+        if (!nextIsPipe && !nextHasSpaces && !isSeparator) {
+          break;
+        }
+
+        tableLines.push(nextLine);
+        j++;
+      }
+
+      // If we have at least 2 lines, try to build a table
+      if (tableLines.length >= 2) {
+        const table = buildMarkdownTable(tableLines);
+        if (table) {
+          result.push(table);
+          i = j;
+          continue;
+        }
+      }
+    }
+
+    // Not a table, add as regular line
+    result.push(line);
+    i++;
+  }
+
+  return result;
+}
+
+/**
+ * Build a Markdown table from detected table lines
+ */
+function buildMarkdownTable(lines: string[]): string | null {
+  if (lines.length < 2) return null;
+
+  // Parse rows
+  const rows: string[][] = [];
+
+  for (const line of lines) {
+    // Skip separator lines
+    if (/^[-|:\s]+$/.test(line)) continue;
+
+    let cells: string[];
+
+    // Parse pipe-separated
+    if (line.includes('|')) {
+      cells = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
+    }
+    // Parse space-separated (2+ spaces as delimiter)
+    else if (/\s{2,}/.test(line)) {
+      cells = line.split(/\s{2,}/).map(c => c.trim()).filter(c => c.length > 0);
+    } else {
+      continue;
+    }
+
+    if (cells.length > 0) {
+      rows.push(cells);
+    }
+  }
+
+  if (rows.length < 2) return null;
+
+  // Ensure all rows have the same number of columns
+  const maxCols = Math.max(...rows.map(r => r.length));
+  const normalizedRows = rows.map(row => {
+    while (row.length < maxCols) {
+      row.push('');
+    }
+    return row;
+  });
+
+  // Build Markdown table
+  const header = normalizedRows[0];
+  const dataRows = normalizedRows.slice(1);
+
+  const headerLine = `| ${header.join(' | ')} |`;
+  const separatorLine = `|${header.map(() => '---').join('|')}|`;
+  const dataLines = dataRows.map(row => `| ${row.join(' | ')} |`);
+
+  return [headerLine, separatorLine, ...dataLines].join('\n');
+}
+
+/**
  * Smart parser that distributes content to appropriate sections
  */
 function parseIncidentText(rawText: string): ParsedSections {
@@ -39,11 +146,18 @@ function parseIncidentText(rawText: string): ParsedSections {
     notes: []
   };
 
-  // Split into lines and analyze each
+  // Split into lines and detect/convert tables
   const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  const processedLines = detectAndConvertTables(lines);
   
-  for (const line of lines) {
+  for (const line of processedLines) {
     const lowerLine = line.toLowerCase();
+    
+    // If it's a table, add to notes by default (will be moved if in relevant context)
+    if (line.startsWith('|')) {
+      sections.notes.push(line);
+      continue;
+    }
     
     // Symptoms: errors, failures, observed issues
     if (/\b(error|failed?|unable|timeout|403|401|502|500|user reported|observed|symptom|impact|receiving|getting|returned)\b/i.test(lowerLine)) {
