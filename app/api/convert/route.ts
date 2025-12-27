@@ -15,8 +15,98 @@ interface ConvertResponse {
   warnings: string[];
 }
 
+interface ParsedSections {
+  issue: string[];
+  symptoms: string[];
+  rootCause: string[];
+  fix: string[];
+  validation: string[];
+  prevention: string[];
+  notes: string[];
+}
+
 /**
- * Generate MDX content with front matter and structured sections
+ * Smart parser that distributes content to appropriate sections
+ */
+function parseIncidentText(rawText: string): ParsedSections {
+  const sections: ParsedSections = {
+    issue: [],
+    symptoms: [],
+    rootCause: [],
+    fix: [],
+    validation: [],
+    prevention: [],
+    notes: []
+  };
+
+  // Split into lines and analyze each
+  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase();
+    
+    // Symptoms: errors, failures, observed issues
+    if (/\b(error|failed?|unable|timeout|403|401|502|500|user reported|observed|symptom|impact|receiving|getting|returned)\b/i.test(lowerLine)) {
+      sections.symptoms.push(line);
+    }
+    // Root Cause: explanations of why
+    else if (/\b(caused by|root cause|because|due to|blocked by|misconfigured?|missing role|dns (wrong|issue)|reason|explanation)\b/i.test(lowerLine)) {
+      sections.rootCause.push(line);
+    }
+    // Fix: actions taken
+    else if (/\b(fix(ed)?|changed?|enabled?|added?|opened?|updated?|configured?|created?|whitelisted?|modified?|set|ran|executed|applied)\b/i.test(lowerLine)) {
+      sections.fix.push(line);
+    }
+    // Validation: verification steps
+    else if (/\b(test(ed)?|confirmed?|verified?|validation|health probe|works? (now|fine)|success(ful)?|passed|checked)\b/i.test(lowerLine)) {
+      sections.validation.push(line);
+    }
+    // Prevention: recommendations
+    else if (/\b(prevent|avoid|recommend(ation)?|harden(ing)?|policy|monitor(ing)?|alert|standardize|best practice|ensure|always)\b/i.test(lowerLine)) {
+      sections.prevention.push(line);
+    }
+    // Issue/Notes: everything else
+    else {
+      // If it's the first few lines, likely the issue description
+      if (sections.issue.length < 3 && !line.match(/^[-*•]\s/)) {
+        sections.issue.push(line);
+      } else {
+        sections.notes.push(line);
+      }
+    }
+  }
+
+  return sections;
+}
+
+/**
+ * Convert parsed lines into Fix steps
+ */
+function buildFixSection(fixLines: string[]): string {
+  if (fixLines.length === 0) {
+    return '(No fix steps captured in incident notes.)';
+  }
+
+  // Build numbered steps
+  return fixLines.map((line, index) => {
+    // Remove leading bullets/numbers if present
+    const cleanLine = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '');
+    return `### Step ${index + 1}: ${cleanLine}`;
+  }).join('\n\n');
+}
+
+/**
+ * Build section content from lines
+ */
+function buildSection(lines: string[]): string {
+  if (lines.length === 0) {
+    return '(No data captured in incident notes.)';
+  }
+  return lines.map(line => `- ${line.replace(/^[-*•]\s*/, '')}`).join('\n');
+}
+
+/**
+ * Generate MDX content with smart parsing
  */
 function generateMDX(
   rawText: string,
@@ -32,8 +122,12 @@ function generateMDX(
   // Generate title if not provided
   const finalTitle = title || 'Azure Troubleshooting Guide';
   
-  // Generate description from first 100 chars of raw text
-  const description = rawText.trim().substring(0, 100).replace(/\n/g, ' ') + '...';
+  // Parse the raw text into sections
+  const parsed = parseIncidentText(rawText);
+  
+  // Generate description from first issue or symptom
+  const descriptionSource = parsed.issue[0] || parsed.symptoms[0] || rawText.trim().substring(0, 100);
+  const description = descriptionSource.substring(0, 100).replace(/\n/g, ' ') + '...';
   
   // Get current date
   const date = new Date().toISOString().split('T')[0];
@@ -56,31 +150,28 @@ severity: "${finalSeverity}"
   const body = `
 ## Issue
 
-[Brief description of the issue]
+${buildSection(parsed.issue)}
 
 ## Symptoms
 
-[What the user is experiencing]
+${buildSection(parsed.symptoms)}
 
 ## Root Cause
 
-[Technical explanation of what's causing the issue]
+${buildSection(parsed.rootCause)}
 
 ## Fix
 
-[Step-by-step solution]
+${buildFixSection(parsed.fix)}
 
 ## Validation
 
-[How to verify the fix worked]
+${buildSection(parsed.validation)}
 
 ## Prevention
 
-[How to prevent this issue in the future]
-
-## Notes
-
-${rawText}
+${buildSection(parsed.prevention)}
+${parsed.notes.length > 0 ? `\n## Notes\n\n${parsed.notes.join('\n')}` : ''}
 `;
   
   const mdx = frontMatter + '\n' + body;
