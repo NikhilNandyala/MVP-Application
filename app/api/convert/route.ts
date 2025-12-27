@@ -7,6 +7,7 @@ interface ConvertRequest {
   title?: string;
   category?: string;
   severity?: string;
+  frontmatter?: Record<string, any>; // Allow passing existing frontmatter
 }
 
 interface ConvertResponse {
@@ -17,222 +18,253 @@ interface ConvertResponse {
 
 interface ParsedSections {
   issue: string[];
-  symptoms: string[];
+  impact: string[];
   rootCause: string[];
   fix: string[];
   validation: string[];
+  lessonsLearned: string[];
   prevention: string[];
-  notes: string[];
+  finalNote: string[];
 }
 
 /**
- * Detect and convert table-like structures to Markdown tables
+ * Preprocess raw text to add machine-safe markers
  */
-function detectAndConvertTables(lines: string[]): string[] {
+function preprocessRawText(rawText: string): string {
+  const lines = rawText.split('\n');
   const result: string[] = [];
   let i = 0;
-
+  
   while (i < lines.length) {
     const line = lines[i];
-
-    // Check if this line looks like a table (pipe-separated or multi-space separated)
-    const isPipeSeparated = line.includes('|');
-    const hasMultipleSpaces = /\s{2,}/.test(line);
-
-    if (isPipeSeparated || hasMultipleSpaces) {
-      // Try to build a table starting from this line
-      const tableLines: string[] = [line];
-      let j = i + 1;
-
-      // Collect consecutive lines that look like table rows
-      while (j < lines.length) {
-        const nextLine = lines[j];
-        const nextIsPipe = nextLine.includes('|');
-        const nextHasSpaces = /\s{2,}/.test(nextLine);
-        const isSeparator = /^[-|:\s]+$/.test(nextLine);
-
-        // Stop if line doesn't match table pattern (unless it's a separator)
-        if (!nextIsPipe && !nextHasSpaces && !isSeparator) {
-          break;
-        }
-
-        tableLines.push(nextLine);
-        j++;
-      }
-
-      // If we have at least 2 lines, try to build a table
-      if (tableLines.length >= 2) {
-        const table = buildMarkdownTable(tableLines);
-        if (table) {
-          result.push(table);
-          i = j;
-          continue;
-        }
-      }
+    const trimmed = line.trim();
+    
+    // Skip empty lines
+    if (trimmed.length === 0) {
+      result.push(line);
+      i++;
+      continue;
     }
-
-    // Not a table, add as regular line
+    
+    // Check for section header
+    const sectionKey = detectSectionHeader(line);
+    if (sectionKey) {
+      // Convert to marker
+      const markerMap: Record<string, string> = {
+        'issue': 'ISSUE',
+        'impact': 'IMPACT',
+        'rootCause': 'ROOT_CAUSE',
+        'fix': 'RESOLUTION',
+        'validation': 'VALIDATION',
+        'lessonsLearned': 'LESSONS_LEARNED',
+        'prevention': 'PREVENTION',
+        'finalNote': 'FINAL_NOTE'
+      };
+      result.push(`[[SECTION:${markerMap[sectionKey]}]]`);
+      i++;
+      continue;
+    }
+    
+    // Look ahead for table
+    const lookAheadLines: string[] = [trimmed];
+    let j = i + 1;
+    
+    while (j < lines.length) {
+      const nextLine = lines[j].trim();
+      if (nextLine.length === 0) break;
+      if (detectSectionHeader(lines[j])) break;
+      lookAheadLines.push(nextLine);
+      j++;
+    }
+    
+    // Check if this is a table
+    if (isTableLike(lookAheadLines)) {
+      result.push('[[TABLE]]');
+      for (let k = i; k < j; k++) {
+        result.push(lines[k].trim());
+      }
+      result.push('[[/TABLE]]');
+      i = j;
+      continue;
+    }
+    
+    // Regular line
     result.push(line);
     i++;
   }
-
-  return result;
+  
+  return result.join('\n');
 }
 
 /**
- * Build a Markdown table from detected table lines
+ * Parse preprocessed text with markers into sections
  */
-function buildMarkdownTable(lines: string[]): string | null {
-  if (lines.length < 2) return null;
-
-  // Parse rows
-  const rows: string[][] = [];
-
+function parseMarkedText(markedText: string): ParsedSections {
+  const sections: ParsedSections = {
+    issue: [],
+    impact: [],
+    rootCause: [],
+    fix: [],
+    validation: [],
+    lessonsLearned: [],
+    prevention: [],
+    finalNote: []
+  };
+  
+  const markerToSection: Record<string, keyof ParsedSections> = {
+    'ISSUE': 'issue',
+    'IMPACT': 'impact',
+    'ROOT_CAUSE': 'rootCause',
+    'RESOLUTION': 'fix',
+    'VALIDATION': 'validation',
+    'LESSONS_LEARNED': 'lessonsLearned',
+    'PREVENTION': 'prevention',
+    'FINAL_NOTE': 'finalNote'
+  };
+  
+  const lines = markedText.split('\n');
+  let currentSection: keyof ParsedSections | null = null;
+  let inTable = false;
+  let tableLines: string[] = [];
+  
   for (const line of lines) {
-    // Skip separator lines
-    if (/^[-|:\s]+$/.test(line)) continue;
-
-    let cells: string[];
-
-    // Parse pipe-separated
-    if (line.includes('|')) {
-      cells = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
-    }
-    // Parse space-separated (2+ spaces as delimiter)
-    else if (/\s{2,}/.test(line)) {
-      cells = line.split(/\s{2,}/).map(c => c.trim()).filter(c => c.length > 0);
-    } else {
+    const trimmed = line.trim();
+    
+    // Section marker
+    const sectionMatch = trimmed.match(/^\[\[SECTION:(\w+)\]\]$/);
+    if (sectionMatch) {
+      currentSection = markerToSection[sectionMatch[1]] || null;
       continue;
     }
-
-    if (cells.length > 0) {
-      rows.push(cells);
+    
+    // Table start
+    if (trimmed === '[[TABLE]]') {
+      inTable = true;
+      tableLines = [];
+      continue;
+    }
+    
+    // Table end
+    if (trimmed === '[[/TABLE]]') {
+      inTable = false;
+      if (currentSection && tableLines.length > 0) {
+        const table = linesToMarkdownTable(tableLines);
+        sections[currentSection].push(table);
+      }
+      continue;
+    }
+    
+    // Inside table
+    if (inTable) {
+      if (trimmed.length > 0) {
+        tableLines.push(trimmed);
+      }
+      continue;
+    }
+    
+    // Regular content
+    if (trimmed.length > 0 && currentSection) {
+      sections[currentSection].push(trimmed);
     }
   }
+  
+  return sections;
+}
 
-  if (rows.length < 2) return null;
+/**
+ * Detect section headers and map to section keys
+ */
+function detectSectionHeader(line: string): keyof ParsedSections | null {
+  const trimmed = line.trim().toLowerCase();
+  
+  // Remove common prefixes/suffixes
+  const cleaned = trimmed.replace(/^#+\s*/, '').replace(/[:：]\s*$/, '');
+  
+  if (cleaned === 'issue') return 'issue';
+  if (cleaned === 'impact') return 'impact';
+  if (cleaned === 'root cause') return 'rootCause';
+  if (cleaned === 'resolution' || cleaned === 'fix') return 'fix';
+  if (cleaned === 'validation') return 'validation';
+  if (cleaned === 'lesson learned' || cleaned === 'lessons learned') return 'lessonsLearned';
+  if (cleaned === 'prevention') return 'prevention';
+  if (cleaned === 'final note' || cleaned === 'final notes') return 'finalNote';
+  
+  return null;
+}
 
-  // Ensure all rows have the same number of columns
+/**
+ * Detect if lines form a table (tab or multi-space separated)
+ */
+function isTableLike(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  
+  // Check if lines have consistent column structure
+  const hasTabSeparators = lines.every(line => line.includes('\t'));
+  const hasMultiSpaceSeparators = lines.every(line => /\s{2,}/.test(line));
+  
+  if (!hasTabSeparators && !hasMultiSpaceSeparators) return false;
+  
+  // Parse columns for each line
+  const columnCounts = lines.map(line => {
+    if (line.includes('\t')) {
+      return line.split('\t').filter(cell => cell.trim().length > 0).length;
+    } else {
+      return line.split(/\s{2,}/).filter(cell => cell.trim().length > 0).length;
+    }
+  });
+  
+  // Must have at least 2 columns and consistent column counts (within 1 column variance)
+  const minCols = Math.min(...columnCounts);
+  const maxCols = Math.max(...columnCounts);
+  
+  return minCols >= 2 && (maxCols - minCols <= 1);
+}
+
+/**
+ * Convert lines to Markdown table
+ */
+function linesToMarkdownTable(lines: string[]): string {
+  const rows: string[][] = [];
+  
+  for (const line of lines) {
+    let cells: string[];
+    
+    if (line.includes('\t')) {
+      cells = line.split('\t').map(c => c.trim());
+    } else {
+      cells = line.split(/\s{2,}/).map(c => c.trim());
+    }
+    
+    rows.push(cells);
+  }
+  
+  if (rows.length === 0) return '';
+  
+  // Normalize column count
   const maxCols = Math.max(...rows.map(r => r.length));
   const normalizedRows = rows.map(row => {
-    while (row.length < maxCols) {
-      row.push('');
-    }
-    return row;
+    while (row.length < maxCols) row.push('');
+    return row.slice(0, maxCols);
   });
-
+  
   // Build Markdown table
   const header = normalizedRows[0];
   const dataRows = normalizedRows.slice(1);
-
+  
   const headerLine = `| ${header.join(' | ')} |`;
-  const separatorLine = `|${header.map(() => '---').join('|')}|`;
+  const separatorLine = `| ${header.map(() => '---').join(' | ')} |`;
   const dataLines = dataRows.map(row => `| ${row.join(' | ')} |`);
-
+  
   return [headerLine, separatorLine, ...dataLines].join('\n');
 }
 
 /**
- * Smart parser that distributes content to appropriate sections
+ * Smart parser with strict section header detection (legacy - use parseMarkedText instead)
  */
 function parseIncidentText(rawText: string): ParsedSections {
-  const sections: ParsedSections = {
-    issue: [],
-    symptoms: [],
-    rootCause: [],
-    fix: [],
-    validation: [],
-    prevention: [],
-    notes: []
-  };
-
-  // Split into lines and detect/convert tables
-  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-  const processedLines = detectAndConvertTables(lines);
-  
-  for (const line of processedLines) {
-    // If it's a table, add to notes by default
-    if (line.startsWith('|')) {
-      sections.notes.push(line);
-      continue;
-    }
-    
-    const lowerLine = line.toLowerCase();
-    
-    // Check for inline labels at the start of the line
-    const labelMatch = line.match(/^(issue|symptoms?|root cause|cause|fix(?:ed)?|resolution|validation|verify|validated?|prevention|recommend(?:ation)?|notes?)[\s:]+(.+)/i);
-    
-    if (labelMatch) {
-      const label = labelMatch[1].toLowerCase();
-      // The content is always in the last capture group (group 2 after making nested groups non-capturing)
-      const content = (labelMatch[2] || '').trim();
-      
-      // Handle multi-label lines (e.g., "validation and fix")
-      if (/validation.*fix|fix.*validation/.test(lowerLine)) {
-        // Extract action for Fix
-        const actionMatch = content.match(/opened|added|enabled|configured|created|updated|changed|modified|set|applied|ran|executed/i);
-        if (actionMatch) {
-          const fixPart = content.split(/\.|tested|confirmed|verified/i)[0].trim();
-          if (fixPart) sections.fix.push(fixPart);
-        }
-        // Extract verification for Validation
-        const validationMatch = content.match(/(tested|confirmed|verified|validation|works?).*/i);
-        if (validationMatch) {
-          sections.validation.push(validationMatch[0].trim());
-        }
-      }
-      // Single label classification
-      else if (label.startsWith('issue')) {
-        sections.issue.push(content);
-      } else if (label.startsWith('symptom')) {
-        sections.symptoms.push(content);
-      } else if (label.includes('cause') || label === 'cause') {
-        sections.rootCause.push(content);
-      } else if (label.startsWith('fix') || label === 'resolution') {
-        sections.fix.push(content);
-      } else if (label.startsWith('validat') || label === 'verify') {
-        sections.validation.push(content);
-      } else if (label.startsWith('prevent') || label.startsWith('recommend')) {
-        sections.prevention.push(content);
-      } else {
-        sections.notes.push(content);
-      }
-      continue;
-    }
-    
-    // Fallback to keyword-based detection for unlabeled content
-    // Symptoms: errors, failures, observed issues
-    if (/\b(error|failed?|unable|timeout|403|401|502|500|user reported|observed|symptom|impact|receiving|getting|returned)\b/i.test(lowerLine)) {
-      sections.symptoms.push(line);
-    }
-    // Root Cause: explanations of why
-    else if (/\b(caused by|root cause|because|due to|blocked by|misconfigured?|missing role|dns (wrong|issue)|reason|explanation)\b/i.test(lowerLine)) {
-      sections.rootCause.push(line);
-    }
-    // Fix: actions taken
-    else if (/\b(fix(ed)?|changed?|enabled?|added?|opened?|updated?|configured?|created?|whitelisted?|modified?|set|ran|executed|applied)\b/i.test(lowerLine)) {
-      sections.fix.push(line);
-    }
-    // Validation: verification steps
-    else if (/\b(test(ed)?|confirmed?|verified?|validation|health probe|works? (now|fine)|success(ful)?|passed|checked)\b/i.test(lowerLine)) {
-      sections.validation.push(line);
-    }
-    // Prevention: recommendations
-    else if (/\b(prevent|avoid|recommend(ation)?|harden(ing)?|policy|monitor(ing)?|alert|standardize|best practice|ensure|always)\b/i.test(lowerLine)) {
-      sections.prevention.push(line);
-    }
-    // Issue/Notes: everything else
-    else {
-      // If it's the first few lines, likely the issue description
-      if (sections.issue.length < 3 && !line.match(/^[-*•]\s/)) {
-        sections.issue.push(line);
-      } else {
-        sections.notes.push(line);
-      }
-    }
-  }
-
-  return sections;
+  // Use preprocessing pipeline
+  const markedText = preprocessRawText(rawText);
+  return parseMarkedText(markedText);
 }
 
 /**
@@ -252,91 +284,113 @@ function buildFixSection(fixLines: string[]): string {
 }
 
 /**
- * Build section content from lines
+ * Build section content from lines (preserves tables, bullets, and paragraph formatting)
  */
-function buildSection(lines: string[], asPlainText: boolean = false): string {
+function buildSection(lines: string[]): string {
   if (lines.length === 0) {
     return '(No data captured in incident notes.)';
   }
   
-  if (asPlainText) {
-    // Join as paragraph for Issue and Root Cause
-    return lines.join(' ').replace(/^[-*•]\s*/, '');
+  const result: string[] = [];
+  
+  for (const line of lines) {
+    // If it's already a Markdown table, add as-is
+    if (line.startsWith('|')) {
+      result.push(line);
+      continue;
+    }
+    
+    // If it's already a bullet or numbered list, preserve it
+    if (/^[-*•]\s/.test(line) || /^\d+\.\s/.test(line)) {
+      result.push(line);
+      continue;
+    }
+    
+    // Otherwise, add as bullet
+    result.push(`- ${line}`);
   }
   
-  // Build as bullets for other sections
-  return lines.map(line => `- ${line.replace(/^[-*•]\s*/, '')}`).join('\n');
+  return result.join('\n');
 }
 
 /**
- * Generate MDX content with smart parsing
+ * Generate MDX content with strict section-based parsing
+ * Preserves existing frontmatter if provided, never infers values
  */
 function generateMDX(
   rawText: string,
   title?: string,
   category?: string,
-  severity?: string
+  severity?: string,
+  existingFrontmatter?: Record<string, any>
 ): { mdx: string; tags: string[]; warnings: string[] } {
   const warnings: string[] = [];
+  
+  // If frontmatter exists, use it as-is
+  if (existingFrontmatter) {
+    // Parse the raw text into sections
+    const parsed = parseIncidentText(rawText);
+    
+    // Build frontmatter from existing
+    const frontMatterLines = ['---'];
+    for (const [key, value] of Object.entries(existingFrontmatter)) {
+      if (Array.isArray(value)) {
+        frontMatterLines.push(`${key}: [${value.map(v => `"${v}"`).join(', ')}]`);
+      } else if (typeof value === 'string') {
+        frontMatterLines.push(`${key}: "${value}"`);
+      } else {
+        frontMatterLines.push(`${key}: ${value}`);
+      }
+    }
+    frontMatterLines.push('---');
+    
+    const frontMatter = frontMatterLines.join('\n');
+    const body = buildBody(parsed);
+    const mdx = frontMatter + '\n' + body;
+    
+    return { mdx, tags: existingFrontmatter.tags || [], warnings };
+  }
   
   // Extract tags from raw text
   const tags = extractTags(rawText);
   
-  // Generate title if not provided
-  const finalTitle = title || 'Azure Troubleshooting Guide';
-  
   // Parse the raw text into sections
   const parsed = parseIncidentText(rawText);
   
-  // Generate description from first issue or symptom
-  const descriptionSource = parsed.issue[0] || parsed.symptoms[0] || rawText.trim().substring(0, 100);
-  const description = descriptionSource.substring(0, 100).replace(/\n/g, ' ') + '...';
+  // Generate title from Issue section if not provided
+  let finalTitle = title;
+  if (!finalTitle) {
+    const issueText = parsed.issue.join(' ');
+    const firstSentence = issueText.split(/[.!?]/)[0].trim();
+    finalTitle = firstSentence.substring(0, 80) || 'Azure Troubleshooting Guide';
+  }
+  
+  // Generate description from first 1-2 sentences of Issue
+  const issueText = parsed.issue.join(' ');
+  const sentences = issueText.split(/[.!?]/).filter(s => s.trim().length > 0);
+  const description = sentences.slice(0, 2).join('. ').substring(0, 150) + '...';
   
   // Get current date
   const date = new Date().toISOString().split('T')[0];
   
-  // Set defaults
+  // Set defaults (severity ONLY if provided - never infer)
   const finalCategory = category || 'azure-troubleshooting';
-  const finalSeverity = severity || 'Medium';
   
   // Build front matter
-  const frontMatter = `---
+  let frontMatter = `---
 title: "${finalTitle}"
 description: "${description}"
 date: "${date}"
 tags: [${tags.map(tag => `"${tag}"`).join(', ')}]
-category: "${finalCategory}"
-severity: "${finalSeverity}"
----`;
+category: "${finalCategory}"`;
   
-  // Build body sections
-  const body = `
-## Issue
-
-${buildSection(parsed.issue, true)}
-
-## Symptoms
-
-${buildSection(parsed.symptoms)}
-
-## Root Cause
-
-${buildSection(parsed.rootCause, true)}
-
-## Fix
-
-${buildFixSection(parsed.fix)}
-
-## Validation
-
-${buildSection(parsed.validation)}
-
-## Prevention
-
-${buildSection(parsed.prevention)}
-${parsed.notes.length > 0 ? `\n## Notes\n\n${parsed.notes.join('\n')}` : ''}
-`;
+  if (severity) {
+    frontMatter += `\nseverity: "${severity}"`;
+  }
   
+  frontMatter += '\n---';
+  
+  const body = buildBody(parsed);
   const mdx = frontMatter + '\n' + body;
   
   // Validate the generated MDX
@@ -346,6 +400,43 @@ ${parsed.notes.length > 0 ? `\n## Notes\n\n${parsed.notes.join('\n')}` : ''}
   }
   
   return { mdx, tags, warnings };
+}
+
+/**
+ * Build body sections from parsed content
+ */
+function buildBody(parsed: ParsedSections): string {
+  return `
+## Issue
+
+${buildSection(parsed.issue)}
+
+## Impact
+
+${buildSection(parsed.impact)}
+
+## Root Cause
+
+${buildSection(parsed.rootCause)}
+
+## Fix
+
+${buildFixSection(parsed.fix)}
+
+## Validation
+
+${buildSection(parsed.validation)}
+
+## Lessons Learned
+
+${buildSection(parsed.lessonsLearned)}
+
+## Prevention
+
+${parsed.prevention.length > 0 ? buildSection(parsed.prevention) : '(No prevention steps captured.)'}
+
+${parsed.finalNote.length > 0 ? `## Final Note\n\n${buildSection(parsed.finalNote)}` : ''}
+`;
 }
 
 /**
@@ -376,7 +467,8 @@ export async function POST(request: NextRequest) {
       body.rawText,
       body.title,
       body.category,
-      body.severity
+      body.severity,
+      body.frontmatter
     );
     
     const response: ConvertResponse = {
