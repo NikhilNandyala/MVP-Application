@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start -p ${PORT:-8080}",
     "lint": "next lint",
-    "test": "node --loader ts-node/esm tests/parser.test.ts",
+    "test": "tsx tests/fixes.test.ts",
+    "test:parser": "tsx tests/parser.test.ts",
     "postinstall": "echo 'Install complete'"
   },
   "dependencies": {

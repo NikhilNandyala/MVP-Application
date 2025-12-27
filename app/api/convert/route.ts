@@ -28,6 +28,56 @@ interface ParsedSections {
 }
 
 /**
+ * Extract existing frontmatter from raw text if present
+ */
+function extractFrontmatter(rawText: string): { frontmatter: Record<string, any> | null; contentWithoutFrontmatter: string } {
+  const lines = rawText.split('\n');
+  
+  // Check if starts with ---
+  if (lines.length > 2 && lines[0].trim() === '---') {
+    // Find closing ---
+    let endIndex = -1;
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        endIndex = i;
+        break;
+      }
+    }
+    
+    if (endIndex > 0) {
+      // Parse YAML frontmatter
+      const frontmatterLines = lines.slice(1, endIndex);
+      const frontmatter: Record<string, any> = {};
+      
+      for (const line of frontmatterLines) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          const key = line.substring(0, colonIndex).trim();
+          let value = line.substring(colonIndex + 1).trim();
+          
+          // Remove quotes
+          value = value.replace(/^["']|["']$/g, '');
+          
+          // Parse arrays
+          if (value.startsWith('[') && value.endsWith(']')) {
+            const arrayContent = value.substring(1, value.length - 1);
+            frontmatter[key] = arrayContent.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+          } else {
+            frontmatter[key] = value;
+          }
+        }
+      }
+      
+      // Return content without frontmatter
+      const contentWithoutFrontmatter = lines.slice(endIndex + 1).join('\n');
+      return { frontmatter, contentWithoutFrontmatter };
+    }
+  }
+  
+  return { frontmatter: null, contentWithoutFrontmatter: rawText };
+}
+
+/**
  * Preprocess raw text to add machine-safe markers
  */
 function preprocessRawText(rawText: string): string {
@@ -268,23 +318,56 @@ function parseIncidentText(rawText: string): ParsedSections {
 }
 
 /**
- * Convert parsed lines into Fix steps
+ * Convert parsed lines into Fix steps with proper subheadings
  */
 function buildFixSection(fixLines: string[]): string {
   if (fixLines.length === 0) {
     return '(No fix steps captured in incident notes.)';
   }
 
-  // Build numbered steps
-  return fixLines.map((line, index) => {
-    // Remove leading bullets/numbers if present
-    const cleanLine = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '');
-    return `### Step ${index + 1}: ${cleanLine}`;
-  }).join('\n\n');
+  const result: string[] = [];
+  let i = 0;
+  
+  while (i < fixLines.length) {
+    const line = fixLines[i];
+    
+    // Check if this is a step heading (e.g., "STEP 1: DEFINE A TAGGING STANDARD")
+    const stepMatch = line.match(/^(?:STEP\s*\d+:\s*)?(.+?)$/i);
+    
+    if (stepMatch) {
+      const content = stepMatch[1].trim();
+      
+      // Check if next line is a table
+      const isFollowedByTable = i + 1 < fixLines.length && fixLines[i + 1].startsWith('|');
+      
+      if (isFollowedByTable || /^[A-Z][A-Za-z\s]+$/.test(content)) {
+        // This is a step heading - convert to ### subheading
+        result.push(`### ${content}`);
+        result.push('');
+        i++;
+        
+        // Add table if present
+        while (i < fixLines.length && fixLines[i].startsWith('|')) {
+          result.push(fixLines[i]);
+          i++;
+        }
+        result.push('');
+      } else {
+        // Regular fix step
+        const cleanLine = line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '');
+        result.push(`- ${cleanLine}`);
+        i++;
+      }
+    } else {
+      i++;
+    }
+  }
+  
+  return result.join('\n').trim();
 }
 
 /**
- * Build section content from lines (preserves tables, bullets, and paragraph formatting)
+ * Build section content from lines (handles hierarchies, tables, bullets)
  */
 function buildSection(lines: string[]): string {
   if (lines.length === 0) {
@@ -292,22 +375,52 @@ function buildSection(lines: string[]): string {
   }
   
   const result: string[] = [];
+  let i = 0;
   
-  for (const line of lines) {
-    // If it's already a Markdown table, add as-is
+  while (i < lines.length) {
+    const line = lines[i];
+    
+    // If it's already a Markdown table, ensure proper spacing
     if (line.startsWith('|')) {
+      // Check if previous line was a bullet - add blank line before table
+      if (result.length > 0 && result[result.length - 1].startsWith('-')) {
+        result.push('');
+      }
       result.push(line);
+      i++;
+      continue;
+    }
+    
+    // Check for hierarchy markers (e.g., "Because of this:")
+    const hierarchyMatch = line.match(/^(.*?:)\s*$/);
+    if (hierarchyMatch && i + 1 < lines.length && !lines[i + 1].startsWith('|')) {
+      // This starts a nested structure
+      result.push(`- ${hierarchyMatch[1]}`);
+      i++;
+      
+      // Add nested items
+      while (i < lines.length && !lines[i].startsWith('|') && !lines[i].match(/^(.*?):\s*$/)) {
+        const nestedLine = lines[i];
+        if (nestedLine.startsWith('-')) {
+          result.push(`  ${nestedLine}`);
+        } else {
+          result.push(`  - ${nestedLine}`);
+        }
+        i++;
+      }
       continue;
     }
     
     // If it's already a bullet or numbered list, preserve it
     if (/^[-*•]\s/.test(line) || /^\d+\.\s/.test(line)) {
       result.push(line);
+      i++;
       continue;
     }
     
     // Otherwise, add as bullet
     result.push(`- ${line}`);
+    i++;
   }
   
   return result.join('\n');
@@ -326,14 +439,21 @@ function generateMDX(
 ): { mdx: string; tags: string[]; warnings: string[] } {
   const warnings: string[] = [];
   
+  // Extract frontmatter from raw text if present
+  const { frontmatter: extractedFrontmatter, contentWithoutFrontmatter } = extractFrontmatter(rawText);
+  const actualFrontmatter = existingFrontmatter || extractedFrontmatter;
+  
+  // Use content without frontmatter for parsing
+  const contentToParse = extractedFrontmatter ? contentWithoutFrontmatter : rawText;
+  
   // If frontmatter exists, use it as-is
-  if (existingFrontmatter) {
-    // Parse the raw text into sections
-    const parsed = parseIncidentText(rawText);
+  if (actualFrontmatter) {
+    // Parse the content into sections
+    const parsed = parseIncidentText(contentToParse);
     
     // Build frontmatter from existing
     const frontMatterLines = ['---'];
-    for (const [key, value] of Object.entries(existingFrontmatter)) {
+    for (const [key, value] of Object.entries(actualFrontmatter)) {
       if (Array.isArray(value)) {
         frontMatterLines.push(`${key}: [${value.map(v => `"${v}"`).join(', ')}]`);
       } else if (typeof value === 'string') {
@@ -348,14 +468,14 @@ function generateMDX(
     const body = buildBody(parsed);
     const mdx = frontMatter + '\n' + body;
     
-    return { mdx, tags: existingFrontmatter.tags || [], warnings };
+    return { mdx, tags: actualFrontmatter.tags || [], warnings };
   }
   
   // Extract tags from raw text
-  const tags = extractTags(rawText);
+  const tags = extractTags(contentToParse);
   
   // Parse the raw text into sections
-  const parsed = parseIncidentText(rawText);
+  const parsed = parseIncidentText(contentToParse);
   
   // Generate title from Issue section if not provided
   let finalTitle = title;
