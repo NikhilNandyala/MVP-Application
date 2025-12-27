@@ -25,15 +25,31 @@ jobs:
 
       - name: npm install, build, and test
         run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+          npm ci
+          npm run build
+
+      - name: Prepare deployment package
+        run: |
+          # Create a clean deployment directory
+          mkdir -p deploy
+          cp -r .next deploy/
+          cp -r app deploy/
+          cp -r lib deploy/
+          cp -r public deploy/ 2>/dev/null || true
+          cp package.json package-lock.json deploy/
+          cp next.config.ts deploy/
+          cp tailwind.config.ts deploy/
+          cp postcss.config.mjs deploy/
+          cp tsconfig.json deploy/
+          # Install only production dependencies in the deploy folder
+          cd deploy
+          npm ci --production
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: deploy
 
   deploy:
     runs-on: ubuntu-latest
