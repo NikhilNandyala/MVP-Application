@@ -151,14 +151,55 @@ function parseIncidentText(rawText: string): ParsedSections {
   const processedLines = detectAndConvertTables(lines);
   
   for (const line of processedLines) {
-    const lowerLine = line.toLowerCase();
-    
-    // If it's a table, add to notes by default (will be moved if in relevant context)
+    // If it's a table, add to notes by default
     if (line.startsWith('|')) {
       sections.notes.push(line);
       continue;
     }
     
+    const lowerLine = line.toLowerCase();
+    
+    // Check for inline labels at the start of the line
+    const labelMatch = lowerLine.match(/^(issue|symptoms?|root cause|cause|fix(ed)?|resolution|validation|verify|validated?|prevention|recommend(ation)?|notes?)[\s:]+(.+)/i);
+    
+    if (labelMatch) {
+      const label = labelMatch[1].toLowerCase();
+      const content = line.substring(labelMatch[0].length - labelMatch[3].length).trim();
+      
+      // Handle multi-label lines (e.g., "validation and fix")
+      if (/validation.*fix|fix.*validation/.test(lowerLine)) {
+        // Extract action for Fix
+        const actionMatch = content.match(/opened|added|enabled|configured|created|updated|changed|modified|set|applied|ran|executed/i);
+        if (actionMatch) {
+          const fixPart = content.split(/\.|tested|confirmed|verified/i)[0].trim();
+          if (fixPart) sections.fix.push(fixPart);
+        }
+        // Extract verification for Validation
+        const validationMatch = content.match(/(tested|confirmed|verified|validation|works?).*/i);
+        if (validationMatch) {
+          sections.validation.push(validationMatch[0].trim());
+        }
+      }
+      // Single label classification
+      else if (label.startsWith('issue')) {
+        sections.issue.push(content);
+      } else if (label.startsWith('symptom')) {
+        sections.symptoms.push(content);
+      } else if (label.includes('cause') || label === 'cause') {
+        sections.rootCause.push(content);
+      } else if (label.startsWith('fix') || label === 'resolution') {
+        sections.fix.push(content);
+      } else if (label.startsWith('validat') || label === 'verify') {
+        sections.validation.push(content);
+      } else if (label.startsWith('prevent') || label.startsWith('recommend')) {
+        sections.prevention.push(content);
+      } else {
+        sections.notes.push(content);
+      }
+      continue;
+    }
+    
+    // Fallback to keyword-based detection for unlabeled content
     // Symptoms: errors, failures, observed issues
     if (/\b(error|failed?|unable|timeout|403|401|502|500|user reported|observed|symptom|impact|receiving|getting|returned)\b/i.test(lowerLine)) {
       sections.symptoms.push(line);
@@ -212,10 +253,17 @@ function buildFixSection(fixLines: string[]): string {
 /**
  * Build section content from lines
  */
-function buildSection(lines: string[]): string {
+function buildSection(lines: string[], asPlainText: boolean = false): string {
   if (lines.length === 0) {
     return '(No data captured in incident notes.)';
   }
+  
+  if (asPlainText) {
+    // Join as paragraph for Issue and Root Cause
+    return lines.join(' ').replace(/^[-*•]\s*/, '');
+  }
+  
+  // Build as bullets for other sections
   return lines.map(line => `- ${line.replace(/^[-*•]\s*/, '')}`).join('\n');
 }
 
@@ -264,7 +312,7 @@ severity: "${finalSeverity}"
   const body = `
 ## Issue
 
-${buildSection(parsed.issue)}
+${buildSection(parsed.issue, true)}
 
 ## Symptoms
 
@@ -272,7 +320,7 @@ ${buildSection(parsed.symptoms)}
 
 ## Root Cause
 
-${buildSection(parsed.rootCause)}
+${buildSection(parsed.rootCause, true)}
 
 ## Fix
 
