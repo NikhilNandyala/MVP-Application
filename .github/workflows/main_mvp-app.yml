@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
           node-version: '22.x'
           cache: 'npm'
 
-      - name: npm install, build, and test
+      - name: npm install and build
         run: |
           npm ci
           npm run build
@@ -42,8 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
       - name: Download artifact from build job
@@ -58,8 +58,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_6212F48401B144BE894F4D3BC03D7C47 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_928778407CEF4B10BE717A14DF4781E3 }}
 
-      - name: 'Deploy to Azure Web App'
-        run: |
-          az webapp config appsettings set --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true WEBSITE_NODE_DEFAULT_VERSION=22-lts
-          az webapp deploy --name MVP-APP --resource-group mvp-app-a4f2hadybafbcghc_group --src-path release.zip --type zip --async false --restart true --clean true
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'MVP-APP'
+          package: release.zip
           
