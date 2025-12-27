@@ -160,11 +160,12 @@ function parseIncidentText(rawText: string): ParsedSections {
     const lowerLine = line.toLowerCase();
     
     // Check for inline labels at the start of the line
-    const labelMatch = lowerLine.match(/^(issue|symptoms?|root cause|cause|fix(ed)?|resolution|validation|verify|validated?|prevention|recommend(ation)?|notes?)[\s:]+(.+)/i);
+    const labelMatch = line.match(/^(issue|symptoms?|root cause|cause|fix(?:ed)?|resolution|validation|verify|validated?|prevention|recommend(?:ation)?|notes?)[\s:]+(.+)/i);
     
     if (labelMatch) {
       const label = labelMatch[1].toLowerCase();
-      const content = line.substring(labelMatch[0].length - labelMatch[3].length).trim();
+      // The content is always in the last capture group (group 2 after making nested groups non-capturing)
+      const content = (labelMatch[2] || '').trim();
       
       // Handle multi-label lines (e.g., "validation and fix")
       if (/validation.*fix|fix.*validation/.test(lowerLine)) {
